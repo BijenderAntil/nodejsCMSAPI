@@ -8,6 +8,7 @@ const {
     v1: uuidv1,
     v4: uuidv4,
   } = require('uuid');
+const { Resolver } = require('dns');
 const PORT =8000;
 app.use(bodyParser.json());
 
@@ -46,7 +47,7 @@ app.post('/api/users',validate(createUserValidation, {}, {}), readFile, async(re
     });
     //res.status(404).send("Error");
 })
-app.put('/api/users/:id',validate(createUserValidation, {}, {}), readFile,(req, res)=>{
+app.put('/api/users/:id',validate(createUserValidation, {}, {}), readFile,async(req, res)=>{
     const userData = req.body.fileData;
     const updateToData = userData.find((f)=>f.id===req.params.id);
     if(!updateToData){
@@ -60,13 +61,29 @@ app.put('/api/users/:id',validate(createUserValidation, {}, {}), readFile,(req, 
     delete req.body.fileData;
     let updatedData = Object.assign(updateToData, req.body);
     userData[index] = updatedData;
-    fs.writeFile("users.json", JSON.stringify(userData),err=>{
+    const promise = new Promise((Resolver, Reject)=>{
+      fs.writeFile("users.json", JSON.stringify(userData),err=>{
+        if(err)
+          Reject(err);
+        else
+          Resolver(userData);
+      });  
+    });
+    const response = await promise;
+    try{
       return res.status(200).json({
         status: 'success',
         error: '',
-        data:userData
+        data:response
       });
-    });   
+    }catch(err){
+      return res.status(404).json({
+        status: 'error',
+        error: 'something went wrong!',
+        data:[]
+      });
+    }
+    
 });
 app.patch('/api/users/:id',validate(createUserValidation, {}, {}), readFile,(req, res)=>{
   const userData = req.body.fileData;
@@ -123,11 +140,31 @@ function writeFile(req, res, fileData, next){
     });
 }
 app.delete('/api/users/:id', readFile, async(req, res, next)=>{
-  const userData = req.body.fileData;
+    let userData = req.body.fileData;
     if(userData.find((f)=>f.id===req.params.id)){
-        req.body.fileData = userData.filter((f)=>f.id!==req.params.id);
-        writeFile(req, res, next);
-        res.status(200).send("User has been successfully deleted.");
+        userData = userData.filter((f)=>f.id!==req.params.id);
+        const promise = new Promise((Resolver, Reject)=>{
+          fs.writeFile("users.json", JSON.stringify(userData),err=>{
+            if(err)
+              Reject(err);
+            else
+              Resolver(userData);
+          });
+        });
+        const response = await promise;
+        try{
+          return res.status(200).json({
+            status: 'success',
+            error: '',
+            data:response
+          });
+        }catch(err){
+          return res.status(404).json({
+            status: 'error',
+            error: 'something went wrong!',
+            data:[]
+          });
+        }
     }
     res.status(500).send(`User not Found!-${req.params.id}`);
 })
